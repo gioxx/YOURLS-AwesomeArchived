@@ -1,22 +1,38 @@
+from dotenv import load_dotenv
+from tqdm import tqdm
+import argparse
+import json
+import os
 import re
 import requests
-from dotenv import load_dotenv
-import os
-import json
+import urllib3
+
+parser = argparse.ArgumentParser(description="Check archived or renamed GitHub repositories listed in the YOURLS awesome README.")
+parser.add_argument(
+    "--no-ssl-verify",
+    action="store_true",
+    help="Disable SSL certificate verification (useful behind corporate proxies)"
+)
+args = parser.parse_args()
+VERIFY_SSL = not args.no_ssl_verify
+
+# Disable warning if SSL verification is off
+if not VERIFY_SSL:
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 load_dotenv()
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 RAW_README_URL = "https://raw.githubusercontent.com/YOURLS/awesome/main/README.md"
 OUTPUT_FILE = "output.json"
 
-response = requests.get(RAW_README_URL)
+response = requests.get(RAW_README_URL, verify=VERIFY_SSL)
 if response.status_code != 200:
     raise Exception(f"Failed to download README.md (HTTP {response.status_code})")
 content = response.text
 
 repo_pattern = r"https?://github\.com/([\w\-]+)/([\w\.\-]+)(?!/[\w\-])"
 matches = re.findall(repo_pattern, content)
-unique_repos = list(set(matches))  # Remove duplicates
+unique_repos = list(set(matches))
 
 def check_repo_status(owner, repo):
     original_api_url = f"https://api.github.com/repos/{owner}/{repo}"
@@ -24,11 +40,11 @@ def check_repo_status(owner, repo):
         "Authorization": f"token {GITHUB_TOKEN}"
     }
 
-    response = requests.get(original_api_url, headers=headers, allow_redirects=False)
+    response = requests.get(original_api_url, headers=headers, allow_redirects=False, verify=VERIFY_SSL)
 
     if response.status_code == 301:
         redirected_api_url = response.headers.get("Location")
-        redirected_response = requests.get(redirected_api_url, headers=headers)
+        redirected_response = requests.get(redirected_api_url, headers=headers, verify=VERIFY_SSL)
         if redirected_response.status_code == 200:
             data = redirected_response.json()
             return {
@@ -66,7 +82,8 @@ def check_repo_status(owner, repo):
         }
 
 results = []
-for owner, repo in unique_repos:
+print("\n🔍 Checking repository statuses...\n")
+for owner, repo in tqdm(unique_repos, desc="Processing", unit="repo"):
     results.append(check_repo_status(owner, repo))
 
 filtered_results = []

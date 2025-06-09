@@ -30,7 +30,7 @@ if response.status_code != 200:
     raise Exception(f"Failed to download README.md (HTTP {response.status_code})")
 content = response.text
 
-repo_pattern = r"https?://github\.com/([\w\-]+)/([\w\.\-]+)(?!/[\w\-])"
+repo_pattern = r"https?://github\.com/(?!orgs/|topics/|features/)([\w\-]+)/([\w\.\-]+)(?!/[\w\-])"
 matches = re.findall(repo_pattern, content)
 unique_repos = list(set(matches))
 
